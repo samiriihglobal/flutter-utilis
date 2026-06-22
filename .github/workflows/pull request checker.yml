@@ -1,0 +1,78 @@
+name: Flutter Community PR Validator
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate PR Title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "Checking PR Title..."
+
+          if [[ ! "$PR_TITLE" =~ ^(feature|fix|docs): ]]; then
+            echo "Invalid PR title."
+            echo "Expected:"
+            echo "feature: Dio API Client"
+            echo "fix: SVG Utility"
+            exit 1
+          fi
+
+      - name: Validate PR Description
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          echo "Checking PR Description..."
+
+          echo "$PR_BODY" | grep -q "Feature Name:" || exit 1
+          echo "$PR_BODY" | grep -q "Folder Name:" || exit 1
+          echo "$PR_BODY" | grep -q "Purpose:" || exit 1
+          echo "$PR_BODY" | grep -q "Dependencies:" || exit 1
+          echo "$PR_BODY" | grep -q "Usage:" || exit 1
+
+      - name: Check Folder Structure
+        run: |
+          echo "Checking Folder Structure..."
+
+          git fetch origin main
+
+          CHANGED_FILES=$(git diff --name-only origin/main)
+
+          echo "$CHANGED_FILES"
+
+          INVALID=$(echo "$CHANGED_FILES" | grep -vE '^(api|utils|services|widgets|README.md)')
+
+          if [ ! -z "$INVALID" ]; then
+            echo "Invalid files detected:"
+            echo "$INVALID"
+            exit 1
+          fi
+
+      - name: Verify Documentation Exists
+        run: |
+          if [ ! -f README.md ]; then
+            echo "README.md missing"
+            exit 1
+          fi
+
+      - name: Auto Merge PR
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge \
+          ${{ github.event.pull_request.number }} \
+          --squash \
+          --auto
